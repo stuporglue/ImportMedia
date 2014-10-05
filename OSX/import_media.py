@@ -196,7 +196,7 @@ for file_or_dir in sys.argv[1:]:
                         print 'PROGRESS:' + str(progress)
                         sys.stdout.flush()
                 except:
-                    totalerror.push(root + os.sep + filename)
+                    totalerror.append(root + os.sep + filename)
                     totalprocessed += 1
                     if  progress > lastprogress:
                         lastprogress = progress
