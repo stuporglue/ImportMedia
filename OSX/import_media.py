@@ -11,10 +11,11 @@ sys.stdout.flush()
 import os
 import signal
 import mimetypes
-import EXIF
 import time
 import shutil
 import hashlib
+import re
+import subprocess
 from os.path import expanduser
 
 #
@@ -37,7 +38,7 @@ supportedTypes = ['image','video']
 #
 # These types will be copied using their EXIF data if possible (falls back to their c_time)
 
-jpegTypes = ['jpeg','pjpeg']
+#jpegTypes = ['jpeg','pjpeg','mpeg','mp4']
 
 # CODE
 
@@ -109,28 +110,30 @@ def probeFile(filename):
         destPath = None
         category,subtype = maintype.split('/')
 
-        if subtype in jpegTypes:
+        if category in supportedTypes:
             try:
                 # Try to get exif taken date
-                jpg = open(filename,'rb')
-                tags = EXIF.process_file(jpg,details=False,stop_tag="EXIF DateTimeOriginal")
-                jpg.close()
+                maybetags = ["DateTimeOriginal", "CreateDate", "TrackCreateDate", "MediaCreateDate", "ModifyDate", "MediaModifyDate"] 
 
-                if "EXIF DateTimeOriginal" in tags:
-                    origTime = tags["EXIF DateTimeOriginal"]
+                for maybetag in maybetags:
+                    doutput = subprocess.check_output(["exiftool","-" + maybetag,filename])
+                    if len(doutput) > 0:
+                        break
+
+                dreone = re.sub(r".*: ",'',doutput)
+                draw = re.sub(r"\n",'',dreone)
+                if len(draw) > 0:
+                    origTime = draw
                     timestamp = time.strptime(str(origTime),"%Y:%m:%d %H:%M:%S")
                 else:
                     create_date = os.stat(filename)[9]
                     timestamp = time.gmtime(create_date)
             except:
-                # print "Error getting EXIF date for " + filename + ". Copying with ctime"
-                # sys.stdout.flush()
+                theerror = sys.exc_info()[0]
+                print "CAUGHT EXCEPTION: " + theerror
                 timestamp = time.gmtime(os.stat(filename)[9]) # [9] is st_ctime
 
             return copyFile(timestamp,filename)
-        elif category in supportedTypes:
-            create_date = os.stat(filename)[9] # [9] is st_ctime
-            return copyFile(time.gmtime(create_date),filename)
 
 totalnew = 0
 totaldup = 0
