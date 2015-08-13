@@ -1,215 +1,227 @@
-#!/usr/bin/env python 
 import sys
-print "Loading Program..."
-sys.stdout.flush()
-
-# Import Photos!
-#
-# This script imports photos (or other documents) into date based directories
-# Copyright 2014 Michael Moore <stuporglue@gmail.com>
-
 import os
-import signal
 import mimetypes
 import time
 import shutil
 import hashlib
 import re
 import subprocess
-from os.path import expanduser
 
-#
-# SETTINGS
-#
+class ImportMedia(object):
 
-# The base directory where photos will be copied into
-destdir = expanduser("~" + os.sep + "Pictures" + os.sep + "MediaSorter" + os.sep)
+    def __init__(self, source=[], dest=''):
+        # Source and dest
+        self.source = source
+        self.dest = dest
 
-# The directory structure that the pictures will be copied into
-dirformat = "%Y" + os.sep + "%m" + os.sep + "%d"
+        # File tracking
+        self.allfiles = []
+        self.possibledupes = []
+        self.totalerror = []
 
-# These mime types will be copied. Other mime types will be ignored
-supportedTypes = ['image','video']
+        # Stats
+        self.totalnew = 0
+        self.totalprocessed = 0
+        self.totaldup = 0
+        self.lastprogress = 0
+
+        # Settings
+        self.be_verbose = True
+        self.dirformat = "%Y" + os.sep + "%m" + os.sep + "%d"
+        self.supported_types = ['image', 'video']
+
+        # Setup
+        self.get_files()
 
 
-#
-# CODE
-# You shouldn't need to modify anything below here if you're just using the program
-#
-# These types will be copied using their EXIF data if possible (falls back to their c_time)
+    # Find all of the files in our source directory
+    # Set self.allfiles as an array of source files
+    def get_files(self):
+        for file_or_dir in self.source:
+            if os.path.isfile(file_or_dir):
+                self.allfiles.append(file_or_dir)
+            elif os.path.isdir(file_or_dir):
+                for (root, subFolders, files) in os.walk(file_or_dir):
+                    for filename in files:
+                        self.allfiles.append(root + os.sep + filename)
 
-#jpegTypes = ['jpeg','pjpeg','mpeg','mp4']
+        # Reverse the list since most recent photos are probably named later
+        # than older ones and we want oure most recents
+        self.allfiles = self.allfiles[::-1]
 
-# CODE
 
-# Handle Ctrl-c without doing a backtrace
-def signal_handler(signal, frame):
-    sys.exit(0)
-signal.signal(signal.SIGINT, signal_handler)
+    # Top level import routine. Import all non-dupes first, then import dupes
+    def do_import(self):
+        self.print_msg("Importing " + str(len(self.allfiles)) + "...")
 
-# Handle incorrect parameters
-if len(sys.argv) < 2:
-    print "Drop files or directories on me!"
-    print "                                "
-    print "I'll put them in " + destdir + ", organized by date."
-    sys.stdout.flush()
-    exit()
+        # Copy all simple cases
+        self.do_copy_routine(self.allfiles)
 
-# Get the md5 hash of a file
-def md5file(filename):
-    f = open(filename,mode='rb')
-    d = hashlib.md5()
-    while True:
-        data = f.read(8192)
-        if not data:
-            break;
-        d.update(data)
-    f.close()
-    return d.hexdigest()
+        # Now copy any files which we need to calculate md5s for. This will be slower, so do it last
+        self.do_copy_routine(self.possibledupes, True)
 
-# Try to copy a file. Handle duplicate names
-def copyFile(timestamp,filename):
-    destpath =  destdir + os.sep + time.strftime(dirformat,timestamp) + os.sep + os.path.basename(filename)
 
-    if not os.path.exists(os.path.dirname(destpath)):
-        #print "Directory " + os.path.dirname(destpath) + " does not exist. Trying to create it."
-        #sys.stdout.flush()
-        os.makedirs(os.path.dirname(destpath))
-
-    # keep modifying destpath with incrementing numbers until we find
-    # an unused number or find a duplicate file. If the file is a
-    # duplicate, return instead of copying
-    if os.path.exists(destpath):
-        basename = os.path.basename(filename)
-        filenamepart,extension = os.path.splitext(basename)
-        counter = 1
-        srchash = md5file(filename)
-
-    fileexisted = False
-    if os.path.exists(destpath):
-        fileexisted = True 
-        
-
-    while os.path.exists(destpath):
-        if md5file(destpath) == srchash:
-            print "\tIdentical file already exists. Not re-copying."
-            return False
-        destpath = destdir + os.sep + time.strftime(dirformat,timestamp) + os.sep + filenamepart + "_" + str(counter) + extension
-        counter += 1
-
-    shutil.copy2(filename,destpath)
-
-    if fileexisted:
-        print "\tDifferent file with same name already exists. Renaming to " + os.path.basename(destpath)
-    return True
-
-# Check all files and send appropriate files off to get copied
-def probeFile(filename):
-    maintype,subtype= mimetypes.guess_type(filename) 
-    if maintype is not None:
-        destPath = None
-        category,subtype = maintype.split('/')
-
-        if category in supportedTypes:
+    # For all files in the given list try to copy them.
+    # In the default case, skip files which have duplicates
+    # Otherwise, tell get_timestamp to handle dupes
+    def do_copy_routine(self, filenames, handle_dupes=False):
+        for filename in filenames:
             try:
-                # Try to get exif taken date
-                maybetags = ["DateTimeOriginal", "CreateDate", "TrackCreateDate", "MediaCreateDate", "ModifyDate", "MediaModifyDate"] 
+                timestamp = self.get_timestamp(filename)
+                if not timestamp:
+                    continue
 
-                for maybetag in maybetags:
-                    doutput = subprocess.check_output(["exiftool","-" + maybetag,filename])
-                    if len(doutput) > 0:
-                        break
+                destpath = self.get_dest_path(timestamp, filename, handle_dupes)
 
-                dreone = re.sub(r".*: ",'',doutput)
-                draw = re.sub(r"\n",'',dreone)
-                if len(draw) > 0:
-                    origTime = draw
-                    timestamp = time.strptime(str(origTime),"%Y:%m:%d %H:%M:%S")
-                else:
-                    create_date = os.stat(filename)[9]
-                    timestamp = time.gmtime(create_date)
-            except:
-                theerror = sys.exc_info()[0]
-                print "CAUGHT EXCEPTION: " + theerror
-                timestamp = time.gmtime(os.stat(filename)[9]) # [9] is st_ctime
-
-            return copyFile(timestamp,filename)
-
-totalnew = 0
-totaldup = 0
-totalerror = []
-print "Starting Import"
-sys.stdout.flush()
-
-# Do 2 loops. One to count files, one to import them
-# The count loop is so we can print a progress bar
-
-# Count loop
-print "Counting files..."
-sys.stdout.flush()
-totalfiles = 0
-for file_or_dir in sys.argv[1:]:
-    if os.path.isfile(file_or_dir):
-        totalfiles += 1
-    elif os.path.isdir(file_or_dir):
-        for (root, subFolders, files) in os.walk(file_or_dir):
-            totalfiles += len(files)
-
-
-print "Print Importing " + str(totalfiles) + "..."
-sys.stdout.flush()
-
-# Import loop
-totalprocessed = 0
-lastprogress = totalprocessed*100/totalfiles
-print 'PROGRESS:' + str(lastprogress)
-sys.stdout.flush()
-for file_or_dir in sys.argv[1:]:
-    print "Copying " + file_or_dir
-    sys.stdout.flush()
-    if os.path.isfile(file_or_dir):
-        try:
-            if probeFile(file_or_dir):
-                totalnew += 1
-            else:
-                totaldup += 1
-            totalprocessed += 1
-            progress = (totalprocessed*100/totalfiles)
-            if  progress > lastprogress:
-                lastprogress = progress
-                print 'PROGRESS:' + str(progress)
-                sys.stdout.flush()
-        except:
-            totalerror.append(file_or_dir)
-            totalprocessed += 1
-    elif os.path.isdir(file_or_dir):
-        for (root, subFolders, files) in os.walk(file_or_dir):
-            for filename in files:
-                print "Copying " + filename
-                sys.stdout.flush()
-                try:
-                    if probeFile(root + os.sep + filename):
-                        totalnew += 1
+                if destpath:
+                    if self.copy_file(filename,destpath):
+                        self.totalnew += 1
                     else:
-                        totaldup += 1
-                    totalprocessed += 1
-                    progress = (totalprocessed*100/totalfiles)
-                    if  progress > lastprogress:
-                        lastprogress = progress
-                        print 'PROGRESS:' + str(progress)
-                        sys.stdout.flush()
+                        self.totaldup += 1
+                    self.totalprocessed += 1
+                    self.print_status()
+            except Exception:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                self.totalerror.append(filename)
+                self.totalprocessed += 1
+                self.print_status()
+
+
+    # Get a timestamp from a file, hopefully using exiftool,
+    # but falling back to the file ctime if needed
+    # Returns False if the file has no type or is not a self.supported_types
+    def get_timestamp(self, filename):
+        maintype, subtype = mimetypes.guess_type(filename)
+        if maintype is not None:
+            maintype = maintype.split('/')
+
+            category = maintype[0]
+
+            if category in self.supported_types:
+                try:
+                    # Try to get exif taken date
+                    maybetags = [
+                        "DateTimeOriginal",
+                        "CreateDate",
+                        "TrackCreateDate",
+                        "MediaCreateDate",
+                        "ModifyDate",
+                        "MediaModifyDate"
+                    ]
+
+                    for maybetag in maybetags:
+                        doutput = subprocess.check_output(["exiftool", "-" + maybetag, filename])
+                        if len(doutput) > 0:
+                            break
+
+                    dreone = re.sub(r".*: ", '', doutput)
+                    draw = re.sub(r"\n", '', dreone)
+                    if len(draw) > 0:
+                        origTime = draw
+                        timestamp = time.strptime(str(origTime), "%Y:%m:%d %H:%M:%S")
+                    else:
+                        create_date = os.stat(filename)[9]
+                        timestamp = time.gmtime(create_date)
                 except:
-                    totalerror.append(root + os.sep + filename)
-                    totalprocessed += 1
-                    if  progress > lastprogress:
-                        lastprogress = progress
-                        print 'PROGRESS:' + str(progress)
-                        sys.stdout.flush()
+                    theerror = sys.exc_info()[0]
+                    print_msg("CAUGHT EXCEPTION: " + theerror)
+                    timestamp = time.gmtime(os.stat(filename)[9]) # [9] is st_ctime
 
-if len(totalerror):
-    print "Errors were found when copying the following files:"
-    print "\t* " + "\n\t* ".join(totalerror)
-    sys.stdout.flush()
+                return timestamp
+        return False
 
-print str(totalnew) + " new files copied. " + str(totaldup) + " duplicates not copied."
-sys.stdout.flush()
+
+    # Given a timestamp and a source filename determine the output filename
+    # If handle_dupes is not True we simply give up when a dupe is encountered
+    def get_dest_path(self, timestamp, filename, handle_dupes=False):
+        destpath = os.path.join(
+                   self.dest,
+                   time.strftime(self.dirformat, timestamp),
+                   os.path.basename(filename)
+                   )
+
+        # keep modifying destpath with incrementing numbers until we find
+        # an unused number or find a duplicate file. If the file is a
+        # duplicate, return instead of copying
+        if os.path.exists(destpath):
+            if not handle_dupes:
+                # Early exit for the quick case
+                self.possibledupes.append(destpath)
+                return False
+            basename = os.path.basename(filename)
+            filenamepart, extension = os.path.splitext(basename)
+            counter = 1
+            srchash = self.md5file(filename)
+
+        while os.path.exists(destpath):
+            if self.md5file(destpath) == srchash:
+                return destpath
+            destpath = os.path.join(
+                            self.dest, 
+                            time.strftime(self.dirformat, timestamp), 
+                            filenamepart + "_" + str(counter) + extension
+                        )
+            counter += 1
+
+        return destpath
+
+    # Try to copy a file. Handle duplicate names
+    def copy_file(self, filename, destpath):
+        if not os.path.exists(os.path.dirname(destpath)):
+            os.makedirs(os.path.dirname(destpath))
+
+        if os.path.exists(destpath):
+            return False
+        else:
+            shutil.copy2(filename, destpath)
+
+        if os.path.basename(filename) != os.path.basename(destpath):
+            self.totaldup += 1
+            print_msg("\tDifferent file with same name already exists. Renaming to " + os.path.basename(destpath))
+
+        return True
+
+    # Util functions
+
+    # Get the md5 hash of a file
+    def md5file(self, filename):
+        filehandle = open(filename, mode='rb')
+        dahash = hashlib.md5()
+        while True:
+            data = filehandle.read(8192)
+            if not data:
+                break
+            dahash.update(data)
+        filehandle.close()
+        return dahash.hexdigest()
+
+    # Print the progress in a format that Platypus understands
+    def print_status(self):
+        progress = (self.totalprocessed*100/len(self.allfiles))
+        if  progress > self.lastprogress:
+            self.lastprogress = progress
+            self.print_msg('PROGRESS:' + str(progress))
+
+    # Simple logger
+    def print_msg(self, msg):
+        if self.be_verbose:
+            print msg
+            sys.stdout.flush()
+
+    # Check our error count
+    def has_errors(self):
+        return len(self.totalerror) > 0
+
+    # Setters
+    def verbose(self, be_verbose=True):
+        self.be_verbose = be_verbose
+
+    def set_dir_format(self, theformat):
+        self.dirformat = theformat
+
+    def set_supported_types(self, types):
+        self.supported_types = types
+
+
+
+
