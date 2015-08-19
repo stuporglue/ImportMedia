@@ -3,6 +3,8 @@ ImportMedia
 
 Copy Files to a YYYY/MM/DD structure. 
 
+You need to install [exiftool](http://www.sno.phy.queensu.ca/~phil/exiftool/index.html) to use this program.
+
 About
 -----
 This program lets you drop images or directories onto its icon, and have the 
