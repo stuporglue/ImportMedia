@@ -17,10 +17,11 @@ Media are placed in ~/Pictures/
 
 Why?
 ----
-I rsync my [Shotwell](https://wiki.gnome.org/Apps/Shotwell) photo directory to a 
-backup server and wanted my wife's photos to be organized in the same structure. 
-
 Organizing by Year-Month-Day makes finding files easy. 
+
+I used to use [Shotwell](https://wiki.gnome.org/Apps/Shotwell) to manage my photos and it used a YYYY/MM/DD 
+directory structure. Now I use [DigiKam](https://apps.kde.org/digikam/) but still use the same directory
+layout.
 
 Changelog
 ---------
