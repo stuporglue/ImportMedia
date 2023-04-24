@@ -1,6 +1,8 @@
 ImportMedia
 ===========
 
+NOTE: This is an old Python 2 version that worked with OSX. I am now using this almost exclusively on Linux but wanted to save this for posterity. 
+
 Copy Files to a YYYY/MM/DD structure. 
 
 You need to install [exiftool](http://www.sno.phy.queensu.ca/~phil/exiftool/index.html) to use this program.
