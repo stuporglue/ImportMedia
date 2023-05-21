@@ -107,6 +107,9 @@ def copyFile(timestamp,filename):
         counter += 1
 
     shutil.copy2(filename,destpath)
+    # Copy the xmp sidecar file, if it exists
+    if os.path.exists(filename + '.xmp'):
+        shutil.copy2(filename + '.xmp',destpath + '.xmp')
 
     print("[" + destpath + "]")
     return True
