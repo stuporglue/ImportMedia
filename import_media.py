@@ -50,6 +50,7 @@ supportedTypes = ['image','video']
 
 # m4v isn't in the db for some reason...
 mimetypes.add_type('video/mp4','.m4v',True)
+mimetypes.add_type('image/heic','.heic',True)
 
 # Why did we need this? Maybe we don't? 
 def signal_handler(signal, frame):
@@ -100,15 +101,14 @@ def copyFile(timestamp,filename):
 
     while os.path.exists(destpath):
         if md5file(destpath) == srchash:
-            print("\tIdentical file already exists. Not re-copying.")
+            print("Identical file [" + destpath + "] already exists. Not re-copying.")
             return False
         destpath = destdir + os.sep + time.strftime(dirformat,timestamp) + os.sep + filenamepart + "_" + str(counter) + extension
         counter += 1
 
     shutil.copy2(filename,destpath)
 
-    if fileexisted:
-        print("\tDifferent file with same name already exists. Renaming to " + os.path.basename(destpath))
+    print("[" + destpath + "]")
     return True
 
 # Check all files and send appropriate files off to get copied
@@ -119,7 +119,7 @@ def probeFile(filename):
         category,subtype = maintype.split('/')
 
         if category in supportedTypes:
-            print("Copying " + filename)
+            print("\t* [" + filename + "] --> ",end="")
             sys.stdout.flush()
 
             try:
@@ -185,7 +185,7 @@ def probeFile(filename):
             # sys.stdout.flush()
             pass
     else:
-        print("No mimetype found for " + filename)
+        print("ERROR: \"" + filename + "\" --> No mimetype found")
 
 totalnew = 0
 totaldup = 0
@@ -208,7 +208,7 @@ for file_or_dir in sys.argv[1:]:
             totalfiles += len(files)
 
 
-print("Print Importing " + str(totalfiles) + "...")
+print("Importing " + str(totalfiles) + "...")
 sys.stdout.flush()
 
 # Import loop
@@ -218,10 +218,9 @@ if totalfiles > 0:
     lastprogress = totalprocessed*100/totalfiles
 else:
     lastprogress = 100
-print('PROGRESS:' + str(lastprogress))
+print('PROGRESS:' + str(int(lastprogress)))
 sys.stdout.flush()
 for file_or_dir in sys.argv[1:]:
-    print("Considering " + file_or_dir + " and its subfolders")
     sys.stdout.flush()
     if os.path.isfile(file_or_dir):
         try:
@@ -233,7 +232,7 @@ for file_or_dir in sys.argv[1:]:
             progress = (totalprocessed*100/totalfiles)
             if  progress > lastprogress:
                 lastprogress = progress
-                print('PROGRESS:' + str(progress))
+                print('PROGRESS:' + str(int(progress)))
                 sys.stdout.flush()
         except Exception as e:
             sys.exit(str(e))
@@ -241,6 +240,7 @@ for file_or_dir in sys.argv[1:]:
             totalerror.append(file_or_dir)
             totalprocessed += 1
     elif os.path.isdir(file_or_dir):
+        print("\nConsidering " + file_or_dir + " and its subfolders\n")
         for (root, subFolders, files) in os.walk(file_or_dir):
             for filename in files:
                 try:
@@ -252,7 +252,7 @@ for file_or_dir in sys.argv[1:]:
                     progress = (totalprocessed*100/totalfiles)
                     if  progress > lastprogress:
                         lastprogress = progress
-                        print('PROGRESS:' + str(progress))
+                        print('PROGRESS:' + str(int(progress)))
                         sys.stdout.flush()
                 except Exception as e:
                     sys.exit(str(e))
@@ -261,7 +261,7 @@ for file_or_dir in sys.argv[1:]:
                     totalprocessed += 1
                     if  progress > lastprogress:
                         lastprogress = progress
-                        print('PROGRESS:' + str(progress))
+                        print('PROGRESS:' + str(int(progress)))
                         sys.stdout.flush()
 
 if len(totalerror):
