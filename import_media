@@ -19,258 +19,274 @@ import subprocess
 from os.path import expanduser
 import traceback
 
-home = expanduser("~")
+class ImportMedia:
+    ###
+    ### SETTINGS
+    ###
 
-###
-### SETTINGS
-###
+    def __init__(self):
+        # The base directory where photos will be copied into
+        self.destdir = expanduser("~") + '/Pictures/'
 
-# The base directory where photos will be copied into
-destdir = home + '/Pictures/'
+        # The directory structure that the pictures will be copied into
+        self.dirformat = "%Y" + os.sep + "%m" + os.sep + "%d"
 
-# Change here to override
-#destdir = "/shared/bigint/Photos/"
+        # These mime types will be copied. Other mime types will be ignored
+        self.supportedTypes = ['image','video']
 
-# The directory structure that the pictures will be copied into
-dirformat = "%Y" + os.sep + "%m" + os.sep + "%d"
+        ########################################################################
+        ########################################################################
+        ########################################################################
+        ###
+        ### CODE
+        ###
+        ### You shouldn't need to modify anything below here if you're just using the program
+        ###
+        ########################################################################
+        ########################################################################
+        ########################################################################
 
-# These mime types will be copied. Other mime types will be ignored
-supportedTypes = ['image','video']
+        self.totalnew = 0
+        self.totaldup = 0
+        self.totalnonimage = 0
+        self.totalsidecar = 0
+        self.totalerror = []
+        self.progress = 0
+        self.totalprocessed = 0
+        self.totalfiles = 0
+        self.lastprogress = 0
 
+        # m4v isn't in the db for some reason...
+        mimetypes.add_type('video/mp4','.m4v',True)
+        mimetypes.add_type('image/heic','.heic',True)
+        mimetypes.add_type('text/plain','.xmp',True)
 
-###
-### CODE
-###
-### You shouldn't need to modify anything below here if you're just using the program
-###
+        # Handle Ctrl-c without doing a backtrace
+        signal.signal(signal.SIGINT, self.signal_handler)
 
-# These types will be copied using their EXIF data if possible (falls back to their c_time)
-
-# Handle Ctrl-c without doing a backtrace
-
-# m4v isn't in the db for some reason...
-mimetypes.add_type('video/mp4','.m4v',True)
-mimetypes.add_type('image/heic','.heic',True)
-
-# Why did we need this? Maybe we don't? 
-def signal_handler(signal, frame):
-    sys.exit(0)
-signal.signal(signal.SIGINT, signal_handler)
-
-# Print USAGE statement if no args are given
-if len(sys.argv) < 2:
-    print("USAGE: import_media.py some_file_or_directory [additional_files_or_directory...]")
-    print("")
-    print("Media will be put in " + destdir + ", organized by " + dirformat + ".")
-    sys.stdout.flush()
-    exit()
-
-# When we have a file name collision, we will calculate an md5 and compare it. 
-# We are OK with md5 because it is fast and the odds of a collission between 
-# different files with the same exif date seems low. 
-def md5file(filename):
-    f = open(filename,mode='rb')
-    d = hashlib.md5()
-    while True:
-        data = f.read(8192)
-        if not data:
-            break;
-        d.update(data)
-    f.close()
-    return d.hexdigest()
-
-# Try to copy a file. Handle duplicate names
-def copyFile(timestamp,filename):
-    destpath =  destdir + os.sep + time.strftime(dirformat,timestamp) + os.sep + os.path.basename(filename)
-
-    if not os.path.exists(os.path.dirname(destpath)):
-        os.makedirs(os.path.dirname(destpath))
-
-    # keep modifying destpath with incrementing numbers until we find
-    # an unused number or find a duplicate file. If the file is a
-    # duplicate, return instead of copying
-    if os.path.exists(destpath):
-        basename = os.path.basename(filename)
-        filenamepart,extension = os.path.splitext(basename)
-        counter = 1
-        srchash = md5file(filename)
-
-    fileexisted = False
-    if os.path.exists(destpath):
-        fileexisted = True 
-
-    while os.path.exists(destpath):
-        if md5file(destpath) == srchash:
-            print("Identical file [" + destpath + "] already exists. Not re-copying.")
-            return False
-        destpath = destdir + os.sep + time.strftime(dirformat,timestamp) + os.sep + filenamepart + "_" + str(counter) + extension
-        counter += 1
-
-    shutil.copy2(filename,destpath)
-    # Copy the xmp sidecar file, if it exists
-    if os.path.exists(filename + '.xmp'):
-        shutil.copy2(filename + '.xmp',destpath + '.xmp')
-
-    print("[" + destpath + "]")
-    return True
-
-# Check all files and send appropriate files off to get copied
-def probeFile(filename):
-    maintype,subtype= mimetypes.guess_type(filename) 
-    if maintype is not None:
-        destPath = None
-        category,subtype = maintype.split('/')
-
-        if category in supportedTypes:
-            print("\t* [" + filename + "] --> ",end="")
+        # Print USAGE statement if no args are given
+        if len(sys.argv) < 2:
+            print("USAGE: import_media.py some_file_or_directory [additional_files_or_directory...]")
+            print("")
+            print("Media will be put in " + self.destdir + ", organized by " + self.dirformat + ".")
             sys.stdout.flush()
+            exit()
 
-            try:
-                # Try to get exif taken date
-                maybetags = [
-                        "DateTimeOriginal",
-                        "CreateDate",
-                        "CreationDate",
-                        "DateCreated",
-                        "TrackCreateDate",
-                        "MediaCreateDate",
-                        "GPSDateTime",
-                        "ModifyDate",
-                        "MediaModifyDate",
-                        "FileModifyDate",
-                        "TrackModifyDate",
-                        "FileInodeChangeDate",
-                        "FileAccessDate"
-                        ] 
+    # Why did we need this? Maybe we don't? 
+    def signal_handler(sefl, signal, frame):
+        sys.exit(0)
 
-                for maybetag in maybetags:
-                    doutput = subprocess.check_output(["exiftool","-" + maybetag,"-extractEmbedded",filename],encoding='UTF-8')
-                    if (len(doutput) > 0 and '0000:00:00 00:00:00' not in doutput ):
-                        break
+    # When we have a file name collision, we will calculate an md5 and compare it. 
+    # We are OK with md5 because it is fast and the odds of a collission between 
+    # different files with the same exif date seems low. 
+    def md5file(self,filename):
+        f = open(filename,mode='rb')
+        d = hashlib.md5()
+        while True:
+            data = f.read(8192)
+            if not data:
+                break;
+            d.update(data)
+        f.close()
+        return d.hexdigest()
 
-                if (len(doutput) > 0 and '0000:00:00 00:00:00' not in doutput):
+    # Try to copy a file. Handle duplicate names
+    def copyFile(self, timestamp,filename):
+        destpath =  self.destdir + os.sep + time.strftime(self.dirformat,timestamp) + os.sep + os.path.basename(filename)
 
-                    # Strip the tag name off the front
-                    dreone = re.sub(r".*: ",'',doutput)
-                    
-                    # Trim the newline off the end
-                    draw = re.sub(r"\n.*",'',dreone)
+        if not os.path.exists(os.path.dirname(destpath)):
+            os.makedirs(os.path.dirname(destpath))
 
-                    # Remove the timezone info off the end
-                    draw = re.sub(r"[+-][0-9]{1,2}:[0-9]{2}$",'',draw)
-                    draw = re.sub(r"Z$",'',draw)
+        # keep modifying destpath with incrementing numbers until we find
+        # an unused number or find a duplicate file. If the file is a
+        # duplicate, return instead of copying
+        if os.path.exists(destpath):
+            basename = os.path.basename(filename)
+            filenamepart,extension = os.path.splitext(basename)
+            counter = 1
+            srchash = self.md5file(filename)
 
-                    # Convert dashes or other delimiters to colons
-                    draw = re.sub(r"[^0-9 ]",':',draw)
-                    
-                    if len(draw) > 0:
-                        sys.stdout.flush()
-                        origTime = draw
-                        timestamp = time.strptime(str(origTime),"%Y:%m:%d %H:%M:%S")
-                    else:
-                        sys.stdout.flush()
-                        create_date = os.stat(filename)[9]
-                        timestamp = time.gmtime(create_date)
+        fileexisted = False
+        if os.path.exists(destpath):
+            fileexisted = True 
+
+        while os.path.exists(destpath):
+            if self.md5file(destpath) == srchash:
+                print("Identical file [" + destpath + "] already exists. Not re-copying.")
+                if os.path.exists(filename + '.xmp'):
+                    if not os.path.exists(destpath + '.xmp'):
+                        shutil.copy2(filename + '.xmp',destpath + '.xmp')
+                        self.totalnonimage -= 1
+                        self.totalsidecar += 1
+                    elif ( self.md5file(filename + '.xmp') != self.md5file(destpath + '.xmp') ):
+                        print("\t\t *** .xmp sidecar file exists in source and destination but files are different. NOT OVERWRITING EXISTING .xmp!");
+                return False
+            destpath = destdir + os.sep + time.strftime(dirformat,timestamp) + os.sep + filenamepart + "_" + str(counter) + extension
+            counter += 1
+
+        shutil.copy2(filename,destpath)
+        # Copy the xmp sidecar file, if it exists
+        if os.path.exists(filename + '.xmp'):
+            shutil.copy2(filename + '.xmp',destpath + '.xmp')
+            self.totalnonimage -= 1
+            self.totalsidecar += 1
+
+        print("[" + destpath + "]")
+        return True
+
+    def supportedFile(self, filename):
+        maintype,subtype= mimetypes.guess_type(filename) 
+        if maintype is None:
+            print("ERROR: \"" + filename + "\" --> No mimetype found")
+            return False
+
+        category,subtype = maintype.split('/')
+        if category in self.supportedTypes:
+            return True 
+
+        return False
+
+    # Check all files and send appropriate files off to get copied
+    def tryCopy(self, filename):
+        destPath = None
+        print("\t* [" + filename + "] --> ",end="")
+        sys.stdout.flush()
+
+        try:
+            # Try to get exif taken date
+            maybetags = [
+                    "DateTimeOriginal",
+                    "CreateDate",
+                    "CreationDate",
+                    "DateCreated",
+                    "TrackCreateDate",
+                    "MediaCreateDate",
+                    "GPSDateTime",
+                    "ModifyDate",
+                    "MediaModifyDate",
+                    "FileModifyDate",
+                    "TrackModifyDate",
+                    "FileInodeChangeDate",
+                    "FileAccessDate"
+                    ] 
+
+            for maybetag in maybetags:
+                doutput = subprocess.check_output(["exiftool","-" + maybetag,"-extractEmbedded",filename],encoding='UTF-8')
+                if (len(doutput) > 0 and '0000:00:00 00:00:00' not in doutput ):
+                    break
+
+            if (len(doutput) > 0 and '0000:00:00 00:00:00' not in doutput):
+
+                # Strip the tag name off the front
+                dreone = re.sub(r".*: ",'',doutput)
+                
+                # Trim the newline off the end
+                draw = re.sub(r"\n.*",'',dreone)
+
+                # Remove the timezone info off the end
+                draw = re.sub(r"[+-][0-9]{1,2}:[0-9]{2}$",'',draw)
+                draw = re.sub(r"Z$",'',draw)
+
+                # Convert dashes or other delimiters to colons
+                draw = re.sub(r"[^0-9 ]",':',draw)
+                
+                if len(draw) > 0:
+                    sys.stdout.flush()
+                    origTime = draw
+                    timestamp = time.strptime(str(origTime),"%Y:%m:%d %H:%M:%S")
                 else:
+                    sys.stdout.flush()
                     create_date = os.stat(filename)[9]
                     timestamp = time.gmtime(create_date)
-            except Exception as e:
-                print(e)
-                traceback.print_exc()
-                theerror = sys.exc_info()[0]
-                sys.stderr.write(theerror)
-                print("CAUGHT EXCEPTION: " + theerror)
-                timestamp = time.gmtime(os.stat(filename)[9]) # [9] is st_ctime
-
-            return copyFile(timestamp,filename)
-        else:
-            # print("Not a supported mime type for " + filename)
-            # sys.stdout.flush()
-            pass
-    else:
-        print("ERROR: \"" + filename + "\" --> No mimetype found")
-
-totalnew = 0
-totaldup = 0
-totalerror = []
-print("Starting Import")
-sys.stdout.flush()
-
-# Do 2 loops. One to count files, one to import them
-# The count loop is so we can print a progress bar
-
-# Count loop
-print("Counting files...")
-sys.stdout.flush()
-totalfiles = 0
-for file_or_dir in sys.argv[1:]:
-    if os.path.isfile(file_or_dir):
-        totalfiles += 1
-    elif os.path.isdir(file_or_dir):
-        for (root, subFolders, files) in os.walk(file_or_dir):
-            totalfiles += len(files)
-
-
-print("Importing " + str(totalfiles) + "...")
-sys.stdout.flush()
-
-# Import loop
-progress = 0
-totalprocessed = 0
-if totalfiles > 0:
-    lastprogress = totalprocessed*100/totalfiles
-else:
-    lastprogress = 100
-print('PROGRESS:' + str(int(lastprogress)))
-sys.stdout.flush()
-for file_or_dir in sys.argv[1:]:
-    sys.stdout.flush()
-    if os.path.isfile(file_or_dir):
-        try:
-            if probeFile(file_or_dir):
-                totalnew += 1
             else:
-                totaldup += 1
-            totalprocessed += 1
-            progress = (totalprocessed*100/totalfiles)
-            if  progress > lastprogress:
-                lastprogress = progress
-                print('PROGRESS:' + str(int(progress)))
+                create_date = os.stat(filename)[9]
+                timestamp = time.gmtime(create_date)
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
+            theerror = sys.exc_info()[0]
+            sys.stderr.write(theerror)
+            print("CAUGHT EXCEPTION: " + theerror)
+            timestamp = time.gmtime(os.stat(filename)[9]) # [9] is st_ctime
+
+        return self.copyFile(timestamp,filename)
+
+    def processOne(self, filename):
+        try:
+            if not self.supportedFile(filename):
+                self.totalnonimage += 1
+            elif self.tryCopy(filename):
+                self.totalnew += 1
+            else:
+                self.totaldup += 1
+
+            self.totalprocessed += 1
+            self.progress = (self.totalprocessed*100/self.totalfiles)
+            if  self.progress > self.lastprogress:
+                self.lastprogress = self.progress
+                print('Progress:' + str(int(self.progress)))
                 sys.stdout.flush()
         except Exception as e:
             sys.exit(str(e))
             sys.stderr.write(str(e))
-            totalerror.append(file_or_dir)
-            totalprocessed += 1
-    elif os.path.isdir(file_or_dir):
-        print("\nConsidering " + file_or_dir + " and its subfolders\n")
-        for (root, subFolders, files) in os.walk(file_or_dir):
-            for filename in files:
-                try:
-                    if probeFile(root + os.sep + filename):
-                        totalnew += 1
-                    else:
-                        totaldup += 1
-                    totalprocessed += 1
-                    progress = (totalprocessed*100/totalfiles)
-                    if  progress > lastprogress:
-                        lastprogress = progress
-                        print('PROGRESS:' + str(int(progress)))
-                        sys.stdout.flush()
-                except Exception as e:
-                    sys.exit(str(e))
-                    sys.stderr.write(str(e))
-                    totalerror.append(root + os.sep + filename)
-                    totalprocessed += 1
-                    if  progress > lastprogress:
-                        lastprogress = progress
-                        print('PROGRESS:' + str(int(progress)))
-                        sys.stdout.flush()
+            self.totalerror.append(filename)
+            self.totalprocessed += 1
+            if  self.progress > self.lastprogress:
+                self.lastprogress = self.progress
+                print('Progress:' + str(int(self.progress)))
+                sys.stdout.flush()
 
-if len(totalerror):
-    print("\nErrors were found when copying the following files:")
-    print("\t* " + "\n\t* ".join(totalerror))
-    sys.stdout.flush()
+    def process(self):
+        print("Starting Import")
+        sys.stdout.flush()
 
-print(str(totalnew) + " new files copied. " + str(totaldup) + " duplicates not copied.")
-sys.stdout.flush()
+        # Do 2 loops. One to count files, one to import them
+        # The count loop is so we can print a progress bar
+
+        # Count loop
+        print("Counting files...")
+        sys.stdout.flush()
+        for file_or_dir in sys.argv[1:]:
+            if os.path.isfile(file_or_dir):
+                self.totalfiles += 1
+            elif os.path.isdir(file_or_dir):
+                for (root, subFolders, files) in os.walk(file_or_dir):
+                    self.totalfiles += len(files)
+
+
+        print("Importing " + str(self.totalfiles) + "...")
+        sys.stdout.flush()
+
+        # Import loop
+        if self.totalfiles > 0:
+            self.lastprogress = self.totalprocessed*100/self.totalfiles
+        else:
+            self.lastprogress = 100
+        print('Progress:' + str(int(self.lastprogress)))
+        sys.stdout.flush()
+
+
+        for file_or_dir in sys.argv[1:]:
+            sys.stdout.flush()
+            if os.path.isfile(file_or_dir):
+                self.processOne(file_or_dir)
+            elif os.path.isdir(file_or_dir):
+                print("\nConsidering " + file_or_dir + " and its subfolders\n")
+                for (root, subFolders, files) in os.walk(file_or_dir):
+                    for filename in files:
+                        self.processOne(root + os.sep + filename)
+        if len(self.totalerror):
+            print("\nErrors were found when copying the following files:")
+            print("\t* " + "\n\t* ".join(self.totalerror))
+            sys.stdout.flush()
+
+        print(str(self.totalnew) + " new files copied.")
+        print(str(self.totalsidecar) + " xmp sidecar files copied.")
+        print(str(self.totaldup) + " duplicates not copied.")
+        print(str(self.totalnonimage) + " non-image files not copied.")
+        print(str(self.totalfiles) + " total files processed.")
+        sys.stdout.flush()
+
+
+im = ImportMedia()
+im.process()
