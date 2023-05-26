@@ -60,6 +60,7 @@ class ImportMedia:
         mimetypes.add_type('video/mp4','.m4v',True)
         mimetypes.add_type('image/heic','.heic',True)
         mimetypes.add_type('text/plain','.xmp',True)
+        mimetypes.add_type('text/plain','.aae',True)
 
         # Handle Ctrl-c without doing a backtrace
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -116,18 +117,40 @@ class ImportMedia:
                 if os.path.exists(filename + '.xmp'):
                     if not os.path.exists(destpath + '.xmp'):
                         shutil.copy2(filename + '.xmp',destpath + '.xmp')
+                        print("\t\t *** Nice! Found an .xmp sidecar file");
                         self.totalnonimage -= 1
                         self.totalsidecar += 1
                     elif ( self.md5file(filename + '.xmp') != self.md5file(destpath + '.xmp') ):
                         print("\t\t *** .xmp sidecar file exists in source and destination but files are different. NOT OVERWRITING EXISTING .xmp!");
+
+                srcAAE = re.sub("\.[^.]*$","",filename) + '.AAE'
+                dstAAE = re.sub("\.[^.]*$","",destpath) + '.AAE'
+                if os.path.exists(srcAAE):
+                    if not os.path.exists(destpath):
+                        shutil.copy2(srcAAE,dstAAE)
+                        print("\t\t *** Nice! Found an .AAE sidecar file");
+                        self.totalnonimage -= 1
+                        self.totalsidecar += 1
+                    elif ( self.md5file(srcAAE) != self.md5file(dstAAE) ):
+                        print("\t\t *** .AAE sidecar file exists in source and destination but files are different. NOT OVERWRITING EXISTING .xmp!");
+                
                 return False
-            destpath = destdir + os.sep + time.strftime(dirformat,timestamp) + os.sep + filenamepart + "_" + str(counter) + extension
+            destpath = self.destdir + os.sep + time.strftime(self.dirformat,timestamp) + os.sep + filenamepart + "_" + str(counter) + extension
             counter += 1
 
         shutil.copy2(filename,destpath)
         # Copy the xmp sidecar file, if it exists
         if os.path.exists(filename + '.xmp'):
             shutil.copy2(filename + '.xmp',destpath + '.xmp')
+            print("\t\t *** Nice! Found an .xmp sidecar file");
+            self.totalnonimage -= 1
+            self.totalsidecar += 1
+
+        srcAAE = re.sub("\.[^.]*$","",filename) + '.AAE'
+        dstAAE = re.sub("\.[^.]*$","",destpath) + '.AAE'
+        if os.path.exists(srcAAE):
+            shutil.copy2(srcAAE,dstAAE)
+            print("\t\t *** Nice! Found an .AAE sidecar file");
             self.totalnonimage -= 1
             self.totalsidecar += 1
 
@@ -222,7 +245,7 @@ class ImportMedia:
 
             self.totalprocessed += 1
             self.progress = (self.totalprocessed*100/self.totalfiles)
-            if  self.progress > self.lastprogress:
+            if  int(self.progress) > int(self.lastprogress):
                 self.lastprogress = self.progress
                 print('Progress:' + str(int(self.progress)))
                 sys.stdout.flush()
@@ -231,7 +254,7 @@ class ImportMedia:
             sys.stderr.write(str(e))
             self.totalerror.append(filename)
             self.totalprocessed += 1
-            if  self.progress > self.lastprogress:
+            if  int(self.progress) > int(self.lastprogress):
                 self.lastprogress = self.progress
                 print('Progress:' + str(int(self.progress)))
                 sys.stdout.flush()
@@ -281,7 +304,7 @@ class ImportMedia:
             sys.stdout.flush()
 
         print(str(self.totalnew) + " new files copied.")
-        print(str(self.totalsidecar) + " xmp sidecar files copied.")
+        print(str(self.totalsidecar) + " sidecar files copied (xmp, AAE).")
         print(str(self.totaldup) + " duplicates not copied.")
         print(str(self.totalnonimage) + " non-image files not copied.")
         print(str(self.totalfiles) + " total files processed.")
