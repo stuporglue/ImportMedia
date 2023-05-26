@@ -247,7 +247,7 @@ class ImportMedia:
             self.progress = (self.totalprocessed*100/self.totalfiles)
             if  int(self.progress) > int(self.lastprogress):
                 self.lastprogress = self.progress
-                print('Progress:' + str(int(self.progress)))
+                print('PROGRESS:' + str(int(self.progress)))
                 sys.stdout.flush()
         except Exception as e:
             sys.exit(str(e))
@@ -256,7 +256,7 @@ class ImportMedia:
             self.totalprocessed += 1
             if  int(self.progress) > int(self.lastprogress):
                 self.lastprogress = self.progress
-                print('Progress:' + str(int(self.progress)))
+                print('PROGRESS:' + str(int(self.progress)))
                 sys.stdout.flush()
 
     def process(self):
@@ -285,7 +285,7 @@ class ImportMedia:
             self.lastprogress = self.totalprocessed*100/self.totalfiles
         else:
             self.lastprogress = 100
-        print('Progress:' + str(int(self.lastprogress)))
+        print('PROGRESS:' + str(int(self.lastprogress)))
         sys.stdout.flush()
 
 
