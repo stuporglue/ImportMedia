@@ -59,6 +59,7 @@ class ImportMedia:
         # m4v isn't in the db for some reason...
         mimetypes.add_type('video/mp4','.m4v',True)
         mimetypes.add_type('image/heic','.heic',True)
+        mimetypes.add_type('image/dng','.dng',True)
         mimetypes.add_type('text/plain','.xmp',True)
         mimetypes.add_type('text/plain','.aae',True)
 
