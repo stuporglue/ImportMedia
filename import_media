@@ -160,7 +160,7 @@ class ImportMedia:
     def supportedFile(self, filename):
         maintype,subtype= mimetypes.guess_type(filename) 
         if maintype is None:
-            print("\t* [" + filename + "] --> No mimetype found. Not importing.")
+            print("ERROR: \"" + filename + "\" --> No mimetype found")
             return False
 
         category,subtype = maintype.split('/')
@@ -222,6 +222,7 @@ class ImportMedia:
                     create_date = os.stat(filename)[9]
                     timestamp = time.gmtime(create_date)
             else:
+                return False
                 create_date = os.stat(filename)[9]
                 timestamp = time.gmtime(create_date)
         except Exception as e:
@@ -260,7 +261,6 @@ class ImportMedia:
                 sys.stdout.flush()
 
     def process(self):
-        print('PROGRESS:' + str(int(self.progress)))
         print("Starting Import")
         sys.stdout.flush()
 
