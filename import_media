@@ -64,7 +64,8 @@ class ImportMedia:
         mimetypes.add_type('text/plain','.aae',True)
 
         # Handle Ctrl-c without doing a backtrace
-        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGINT, self.sigint)
+        signal.signal(signal.SIGUSR1, self.sigusr1)
 
         # Print USAGE statement if no args are given
         if len(sys.argv) < 2:
@@ -74,8 +75,12 @@ class ImportMedia:
             sys.stdout.flush()
             exit()
 
+    def sigusr1(self, signal, frame):
+        print('PROGRESS:' + str(self.progress)
+
+
     # Why did we need this? Maybe we don't? 
-    def signal_handler(sefl, signal, frame):
+    def sigint(self, signal, frame):
         sys.exit(0)
 
     # When we have a file name collision, we will calculate an md5 and compare it. 
