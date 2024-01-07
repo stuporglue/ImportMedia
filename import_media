@@ -76,7 +76,7 @@ class ImportMedia:
             exit()
 
     def sigusr1(self, signal, frame):
-        print('PROGRESS:' + str(self.progress)
+        print('PROGRESS:' + str(self.progress))
 
 
     # Why did we need this? Maybe we don't? 
@@ -138,7 +138,7 @@ class ImportMedia:
                         self.totalnonimage -= 1
                         self.totalsidecar += 1
                     elif ( self.md5file(srcAAE) != self.md5file(dstAAE) ):
-                        print("\t\t *** .AAE sidecar file exists in source and destination but files are different. NOT OVERWRITING EXISTING .xmp!");
+                        print("\t\t *** .AAE sidecar file exists in source and destination but files are different. NOT OVERWRITING EXISTING .AAE!");
                 
                 return False
             destpath = self.destdir + os.sep + time.strftime(self.dirformat,timestamp) + os.sep + filenamepart + "_" + str(counter) + extension
